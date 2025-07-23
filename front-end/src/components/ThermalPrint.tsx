@@ -1,4 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+
+// Thông tin quán - Chỉnh sửa ở đây
+const SHOP_INFO = {
+  name: 'ANH MINH CLUB BI-A',
+  address: 'Sân bóng Hào Xuyên, Thôn Hào Xuyên- Xã Yên Mỹ - Tỉnh Hưng Yên',
+  phone: '0869.986.566',
+  nameAscii: 'ANH MINH CLUB BI-A', // Cho máy in nhiệt (không dấu)
+  addressAscii: 'San bong Hao Xuyen, Thon Hao Xuyen- Xa Yen My - Tinh Hung Yen',
+  phoneAscii: '0869.986.566'
+};
 
 interface Invoice {
   id: number;
@@ -23,6 +33,14 @@ interface ThermalPrintProps {
 }
 
 export const ThermalPrintReceipt: React.FC<ThermalPrintProps> = ({ invoice, onClose }) => {
+  const [isClient, setIsClient] = useState(false);
+  const [timestamp, setTimestamp] = useState<string>('');
+
+  useEffect(() => {
+    setIsClient(true);
+    setTimestamp(Date.now().toString());
+  }, []);
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
@@ -48,27 +66,168 @@ export const ThermalPrintReceipt: React.FC<ThermalPrintProps> = ({ invoice, onCl
   };
 
   const handlePrint = () => {
-    // Use browser print API
     window.print();
   };
 
   const handleThermalPrint = async () => {
     try {
-      // ESC/POS commands for thermal printer
       const escPos = generateESCPOSCommands(invoice);
       
-      // Try to use Web Serial API for direct printer connection
-      if ('serial' in navigator) {
-        await printToThermalPrinter(escPos);
-      } else {
-        // Fallback: Download as text file for manual printing
-        downloadPrintFile(escPos);
+      // Check if we're on HTTPS or localhost
+      const isSecureContext = window.location.protocol === 'https:' || 
+                              window.location.hostname === 'localhost' || 
+                              window.location.hostname === '127.0.0.1';
+      
+      // Try WebUSB API FIRST (only on secure contexts)
+      if ('usb' in navigator && isSecureContext) {
+        try {
+          await printToUSBPrinter(escPos);
+          return;
+        } catch (usbError: any) {
+          // USB failed, try Windows Print fallback
+          try {
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            if (printWindow) {
+              printWindow.document.write(`
+                <html>
+                  <head>
+                    <title>Hóa đơn In Nhiệt</title>
+                    <style>
+                      body { font-family: monospace; width: 300px; margin: 0; padding: 10px; }
+                      .center { text-align: center; }
+                      .bold { font-weight: bold; }
+                      .large { font-size: 18px; }
+                      hr { border: 1px dashed #000; }
+                    </style>
+                  </head>
+                  <body>
+                    <div class="center bold large">${SHOP_INFO.name}</div>
+                    <div class="center">${SHOP_INFO.address}</div>
+                    <div class="center">ĐT: ${SHOP_INFO.phone}</div>
+                    <hr>
+                    <div class="center bold">HÓA ĐƠN THANH TOÁN</div>
+                    <br>
+                    Số HĐ: #${invoice.id.toString().padStart(6, '0')}<br>
+                    Bàn: ${invoice.table_name}<br>
+                    ${invoice.customer_name ? `Khách: ${invoice.customer_name}<br>` : ''}
+                    Ngày: ${formatDateTime(invoice.created_at)}<br>
+                    <hr>
+                    <div class="bold">THỜI GIAN CHƠI:</div>
+                    Bắt đầu: ${formatDateTime(invoice.start_time)}<br>
+                    Kết thúc: ${formatDateTime(invoice.end_time)}<br>
+                    Tổng thời gian: ${formatDuration(invoice.play_duration_minutes)}<br>
+                    Giá/giờ: ${formatCurrency(invoice.hourly_rate)}<br>
+                    <div class="bold">Tiền bàn: ${formatCurrency(invoice.time_total)}</div>
+                    ${invoice.services_detail && invoice.service_total > 0 ? `
+                      <hr>
+                      <div class="bold">DỊCH VỤ:</div>
+                      ${invoice.services_detail}<br>
+                      <div class="bold">Tiền dịch vụ: ${formatCurrency(invoice.service_total)}</div>
+                    ` : ''}
+                    <hr>
+                    Tạm tính: ${formatCurrency(invoice.time_total + invoice.service_total)}<br>
+                    ${invoice.discount > 0 ? `Giảm giá: -${formatCurrency(invoice.discount)}<br>` : ''}
+                    <div class="bold large">TỔNG TIỀN: ${formatCurrency(invoice.amount)}</div>
+                    <hr>
+                    <div class="center">Cảm ơn quý khách!</div>
+                    <div class="center">Hẹn gặp lại!</div>
+                    <div class="center">In lúc: ${new Date().toLocaleString('vi-VN')}</div>
+                  </body>
+                </html>
+              `);
+              printWindow.document.close();
+              printWindow.print();
+              return;
+            }
+          } catch (printError) {
+            // Windows Print failed, continue to next method
+          }
+          
+          // Try Serial as last resort (only on secure contexts)
+          if ('serial' in navigator && isSecureContext) {
+            try {
+              await printToThermalPrinter(escPos);
+              return;
+            } catch (serialError) {
+              // Serial failed, continue to file download
+            }
+          }
+        }
+      } else if (!isSecureContext) {
+        // On HTTP sites, show info and go straight to Windows Print
+        alert('💡 Lưu ý: Để sử dụng in trực tiếp USB, vui lòng truy cập qua HTTPS.\nHiện tại sẽ mở Windows Print dialog.');
       }
+      
+      // Windows Print fallback - always try this
+      try {
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        if (printWindow) {
+          printWindow.document.write(`
+            <html>
+              <head>
+                <title>Hóa đơn In Nhiệt</title>
+                <style>
+                  body { font-family: monospace; width: 300px; margin: 0; padding: 10px; }
+                  .center { text-align: center; }
+                  .bold { font-weight: bold; }
+                  .large { font-size: 18px; }
+                  hr { border: 1px dashed #000; }
+                </style>
+              </head>
+              <body>
+                <div class="center bold large">${SHOP_INFO.name}</div>
+                <div class="center">${SHOP_INFO.address}</div>
+                <div class="center">ĐT: ${SHOP_INFO.phone}</div>
+                <hr>
+                <div class="center bold">HÓA ĐƠN THANH TOÁN</div>
+                <br>
+                Số HĐ: #${invoice.id.toString().padStart(6, '0')}<br>
+                Bàn: ${invoice.table_name}<br>
+                ${invoice.customer_name ? `Khách: ${invoice.customer_name}<br>` : ''}
+                Ngày: ${formatDateTime(invoice.created_at)}<br>
+                <hr>
+                <div class="bold">THỜI GIAN CHƠI:</div>
+                Bắt đầu: ${formatDateTime(invoice.start_time)}<br>
+                Kết thúc: ${formatDateTime(invoice.end_time)}<br>
+                Tổng thời gian: ${formatDuration(invoice.play_duration_minutes)}<br>
+                Giá/giờ: ${formatCurrency(invoice.hourly_rate)}<br>
+                <div class="bold">Tiền bàn: ${formatCurrency(invoice.time_total)}</div>
+                ${invoice.services_detail && invoice.service_total > 0 ? `
+                  <hr>
+                  <div class="bold">DỊCH VỤ:</div>
+                  ${invoice.services_detail}<br>
+                  <div class="bold">Tiền dịch vụ: ${formatCurrency(invoice.service_total)}</div>
+                ` : ''}
+                <hr>
+                Tạm tính: ${formatCurrency(invoice.time_total + invoice.service_total)}<br>
+                ${invoice.discount > 0 ? `Giảm giá: -${formatCurrency(invoice.discount)}<br>` : ''}
+                <div class="bold large">TỔNG TIỀN: ${formatCurrency(invoice.amount)}</div>
+                <hr>
+                <div class="center">Cảm ơn quý khách!</div>
+                <div class="center">Hẹn gặp lại!</div>
+                <div class="center">In lúc: ${new Date().toLocaleString('vi-VN')}</div>
+              </body>
+            </html>
+          `);
+          printWindow.document.close();
+          printWindow.print();
+          return;
+        }
+      } catch (printError) {
+        // Windows Print failed, continue to next method
+      }
+      
+      // Final fallback: download file
+      downloadPrintFile(escPos, timestamp);
+      
     } catch (error) {
-      console.error('Thermal print error:', error);
       alert('Không thể kết nối máy in nhiệt. Vui lòng sử dụng in thường.');
     }
   };
+
+  if (!isClient) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -98,13 +257,13 @@ export const ThermalPrintReceipt: React.FC<ThermalPrintProps> = ({ invoice, onCl
           </div>
         </div>
 
-        {/* Thermal Receipt Layout */}
+        {/* Receipt Content */}
         <div className="thermal-receipt p-4" style={{ fontFamily: 'monospace', maxWidth: '300px', margin: '0 auto' }}>
           {/* Header */}
           <div className="text-center mb-4">
-            <div className="text-lg font-bold">QUÁN BI-A TUẤN ANH</div>
-            <div className="text-sm">123 Đường ABC, Quận XYZ</div>
-            <div className="text-sm">ĐT: 0123.456.789</div>
+            <div className="text-lg font-bold">{SHOP_INFO.name}</div>
+            <div className="text-sm">{SHOP_INFO.address}</div>
+            <div className="text-sm">ĐT: {SHOP_INFO.phone}</div>
             <div className="border-t border-dashed border-gray-400 my-2"></div>
             <div className="text-sm font-bold">HÓA ĐƠN THANH TOÁN</div>
           </div>
@@ -235,7 +394,7 @@ export const ThermalPrintReceipt: React.FC<ThermalPrintProps> = ({ invoice, onCl
 };
 
 // Generate ESC/POS commands for thermal printer
-function generateESCPOSCommands(invoice: Invoice): string {
+export function generateESCPOSCommands(invoice: Invoice): string {
   const ESC = '\x1B';
   const GS = '\x1D';
   
@@ -247,10 +406,10 @@ function generateESCPOSCommands(invoice: Invoice): string {
   
   // Header
   commands += ESC + '!' + '\x38'; // Double width and height
-  commands += 'QUAN BI-A TUAN ANH\n';
+  commands += SHOP_INFO.nameAscii + '\n';
   commands += ESC + '!' + '\x00'; // Normal size
-  commands += '123 Duong ABC, Quan XYZ\n';
-  commands += 'DT: 0123.456.789\n';
+  commands += SHOP_INFO.addressAscii + '\n';
+  commands += 'DT: ' + SHOP_INFO.phoneAscii + '\n';
   commands += '--------------------------------\n';
   commands += ESC + '!' + '\x08'; // Emphasized
   commands += 'HOA DON THANH TOAN\n';
@@ -311,22 +470,85 @@ function generateESCPOSCommands(invoice: Invoice): string {
   return commands;
 }
 
-// Format VND for thermal printer (simplified)
+// Format VND for thermal printer
 function formatVND(amount: number): string {
   return new Intl.NumberFormat('vi-VN').format(amount) + 'd';
 }
 
+// Print to USB printer via WebUSB API
+export async function printToUSBPrinter(commands: string): Promise<void> {
+  if (!('usb' in navigator)) {
+    throw new Error('WebUSB API not supported');
+  }
+
+  try {
+    const device = await (navigator as any).usb.requestDevice({
+      filters: [
+        { vendorId: 0x0483, productId: 0x5743 },
+      ]
+    });
+
+    if (!device.opened) {
+      try {
+        await device.open();
+      } catch (openError: any) {
+        if (openError.name === 'SecurityError' || openError.name === 'NotAllowedError') {
+          throw new Error('USB Access Denied. Please:\n1. Close other apps using printer\n2. Disconnect USB → Wait 5s → Reconnect\n3. Restart Chrome\n4. Try again');
+        }
+        throw openError;
+      }
+    }
+    
+    if (device.configuration === null) {
+      await device.selectConfiguration(1);
+    }
+
+    await device.claimInterface(0);
+
+    const encoder = new TextEncoder();
+    const data = encoder.encode(commands);
+    
+    const endpoints = [1, 2, 0x01, 0x02, 0x81, 0x82];
+    let success = false;
+    
+    for (const endpoint of endpoints) {
+      try {
+        await device.transferOut(endpoint, data);
+        success = true;
+        break;
+      } catch (err) {
+        continue;
+      }
+    }
+
+    await device.close();
+
+    if (success) {
+      alert('✅ In thành công!');
+    } else {
+      throw new Error('Failed to send data to printer - All USB endpoints failed');
+    }
+    
+  } catch (error: any) {
+    if (error.message.includes('Security Error') || error.message.includes('access denied')) {
+      throw new Error('Không thể truy cập máy in USB. Hãy:\n1. Đóng tất cả app khác đang dùng máy in\n2. Ngắt USB cable, đợi 5s, cắm lại\n3. Restart Chrome hoàn toàn\n4. Thử lại');
+    } else if (error.message.includes('No device selected')) {
+      throw new Error('Chưa chọn máy in. Vui lòng chọn máy in trong dialog.');
+    } else {
+      throw error;
+    }
+  }
+}
+
 // Print to thermal printer via Web Serial API
-async function printToThermalPrinter(commands: string): Promise<void> {
+export async function printToThermalPrinter(commands: string): Promise<void> {
   if (!('serial' in navigator)) {
     throw new Error('Web Serial API not supported');
   }
 
   try {
-    // Request serial port
     const port = await (navigator as any).serial.requestPort();
     
-    // Open port with thermal printer settings
     await port.open({ 
       baudRate: 9600,
       dataBits: 8,
@@ -334,35 +556,30 @@ async function printToThermalPrinter(commands: string): Promise<void> {
       parity: 'none'
     });
 
-    // Send commands
     const writer = port.writable.getWriter();
     const encoder = new TextEncoder();
     await writer.write(encoder.encode(commands));
     
-    // Close
     writer.releaseLock();
     await port.close();
     
     alert('In thành công!');
   } catch (error) {
-    console.error('Thermal print error:', error);
     throw error;
   }
 }
 
 // Download print file as fallback
-function downloadPrintFile(commands: string): void {
+export function downloadPrintFile(commands: string, timestamp: string): void {
   const blob = new Blob([commands], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `hoadon_${Date.now()}.txt`;
+  a.download = `hoadon_${timestamp || 'temp'}.txt`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  
-  alert('Đã tải file in. Vui lòng mở bằng phần mềm máy in nhiệt.');
 }
 
 export default ThermalPrintReceipt;

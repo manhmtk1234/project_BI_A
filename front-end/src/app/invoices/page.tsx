@@ -5,7 +5,7 @@ import DashboardLayout from '@/components/DashboardLayout';
 import { Plus, Search, Eye, Edit, Trash2, Calendar, DollarSign, Clock, User, Printer } from 'lucide-react';
 import { Invoice } from '@/types';
 import apiClient from '@/lib/api-client';
-import ThermalPrintReceipt from '@/components/ThermalPrint';
+import { ThermalPrintReceipt } from '@/components/ThermalPrint';
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -90,10 +90,12 @@ export default function InvoicesPage() {
             <h1 className="text-2xl font-bold text-white">Quản lý hóa đơn</h1>
             <p className="text-blue-200 mt-1">Danh sách tất cả hóa đơn trong hệ thống</p>
           </div>
-          <button className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium py-3 px-6 rounded-lg transition-all duration-200 flex items-center space-x-2">
-            <Plus className="w-5 h-5" />
-            <span>Tạo hóa đơn mới</span>
-          </button>
+          <div className="flex space-x-3">
+            <button className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium py-3 px-6 rounded-lg transition-all duration-200 flex items-center space-x-2">
+              <Plus className="w-5 h-5" />
+              <span>Tạo hóa đơn mới</span>
+            </button>
+          </div>
         </div>
 
         {/* Search and Filter */}

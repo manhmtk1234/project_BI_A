@@ -1,4 +1,4 @@
-# Bi-A Management API Testing Guide - Enhanced Version
+# Bi-A Management API Documentation
 
 ## Server Information
 
@@ -10,7 +10,7 @@
 
 Sử dụng JWT Token trong header: `Authorization: Bearer <token>`
 
-## Test Accounts
+## Default Accounts
 
 - **Admin**:
   - Username: `admin`

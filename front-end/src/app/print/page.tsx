@@ -4,7 +4,18 @@ import { useState, useEffect, useRef } from 'react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Printer, Search, Download, Eye, Settings, Calendar } from 'lucide-react';
 import { Invoice } from '@/types';
+import { generateESCPOSCommands, printToUSBPrinter, downloadPrintFile } from '@/components/ThermalPrint';
 import apiClient from '@/lib/api-client';
+
+// Thông tin quán - Đồng bộ với ThermalPrint.tsx
+const SHOP_INFO = {
+  name: 'ANH MINH CLUB BI-A',
+  address: 'Sân bóng Hào Xuyên, Thôn Hào Xuyên- Xã Yên Mỹ - Tỉnh Hưng Yên',
+  phone: '0869.986.566',
+  nameAscii: 'ANH MINH CLUB BI-A',
+  addressAscii: 'San bong Hao Xuyen, Thon Hao Xuyen- Xa Yen My - Tinh Hung Yen',
+  phoneAscii: '0869.986.566'
+};
 
 export default function PrintPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -53,6 +64,100 @@ export default function PrintPage() {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
     return `${hours} giờ ${mins} phút`;
+  };
+
+  const handleThermalPrint = async () => {
+    if (!selectedInvoice) {
+      alert('Vui lòng chọn hóa đơn để in');
+      return;
+    }
+
+    try {
+      const escPos = generateESCPOSCommands(selectedInvoice);
+      
+      // Check if we're on HTTPS or localhost
+      const isSecureContext = window.location.protocol === 'https:' || 
+                              window.location.hostname === 'localhost' || 
+                              window.location.hostname === '127.0.0.1';
+      
+      // Try WebUSB API first (only on secure contexts)
+      if ('usb' in navigator && isSecureContext) {
+        try {
+          await printToUSBPrinter(escPos);
+          return;
+        } catch (usbError: any) {
+          // USB failed, continue to Windows Print fallback
+        }
+      } else if (!isSecureContext) {
+        // On HTTP sites, show info and go straight to Windows Print
+        alert('� Lưu ý: Để sử dụng in trực tiếp USB, vui lòng truy cập qua HTTPS.\nHiện tại sẽ mở Windows Print dialog.');
+      }
+      
+      // Windows Print fallback - always try this
+      try {
+        const printWindow = window.open('', '_blank', 'width=800,height=600');
+        if (printWindow) {
+            printWindow.document.write(`
+              <html>
+                <head>
+                  <title>Hóa đơn In Nhiệt</title>
+                  <style>
+                    body { font-family: monospace; width: 300px; margin: 0; padding: 10px; }
+                    .center { text-align: center; }
+                    .bold { font-weight: bold; }
+                    .large { font-size: 18px; }
+                    hr { border: 1px dashed #000; }
+                  </style>
+                </head>
+                <body>
+                  <div class="center bold large">${SHOP_INFO.name}</div>
+                  <div class="center">${SHOP_INFO.address}</div>
+                  <div class="center">ĐT: ${SHOP_INFO.phone}</div>
+                  <hr>
+                  <div class="center bold">HÓA ĐƠN THANH TOÁN</div>
+                  <br>
+                  Số HĐ: #${selectedInvoice.id.toString().padStart(6, '0')}<br>
+                  Bàn: ${selectedInvoice.table_name}<br>
+                  ${selectedInvoice.customer_name ? `Khách: ${selectedInvoice.customer_name}<br>` : ''}
+                  Ngày: ${formatDate(selectedInvoice.created_at)}<br>
+                  <hr>
+                  <div class="bold">THỜI GIAN CHƠI:</div>
+                  Bắt đầu: ${formatDate(selectedInvoice.start_time)}<br>
+                  Kết thúc: ${formatDate(selectedInvoice.end_time)}<br>
+                  Tổng thời gian: ${formatDuration(selectedInvoice.play_duration_minutes)}<br>
+                  Giá/giờ: ${formatCurrency(selectedInvoice.hourly_rate)}<br>
+                  <div class="bold">Tiền bàn: ${formatCurrency(selectedInvoice.time_total)}</div>
+                  ${selectedInvoice.services_detail && selectedInvoice.service_total > 0 ? `
+                    <hr>
+                    <div class="bold">DỊCH VỤ:</div>
+                    ${selectedInvoice.services_detail}<br>
+                    <div class="bold">Tiền dịch vụ: ${formatCurrency(selectedInvoice.service_total)}</div>
+                  ` : ''}
+                  <hr>
+                  Tạm tính: ${formatCurrency(selectedInvoice.time_total + selectedInvoice.service_total)}<br>
+                  ${selectedInvoice.discount > 0 ? `Giảm giá: -${formatCurrency(selectedInvoice.discount)}<br>` : ''}
+                  <div class="bold large">TỔNG TIỀN: ${formatCurrency(selectedInvoice.amount)}</div>
+                  <hr>
+                  <div class="center">Cảm ơn quý khách!</div>
+                  <div class="center">Hẹn gặp lại!</div>
+                  <div class="center">In lúc: ${new Date().toLocaleString('vi-VN')}</div>
+                </body>
+              </html>
+            `);
+          printWindow.document.close();
+          printWindow.print();
+          return;
+        }
+      } catch (printError) {
+        // Windows Print failed
+      }
+      
+      // If all fails, download file
+      downloadPrintFile(escPos, selectedInvoice.id.toString());
+      
+    } catch (error) {
+      alert('Không thể kết nối máy in nhiệt. Vui lòng sử dụng in thường.');
+    }
   };
 
   const handlePrint = () => {
@@ -125,13 +230,22 @@ export default function PrintPage() {
               <span>Cài đặt in</span>
             </button>
             {selectedInvoice && (
-              <button 
-                onClick={handlePrint}
-                className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 flex items-center space-x-2"
-              >
-                <Printer className="w-4 h-4" />
-                <span>In hóa đơn</span>
-              </button>
+              <div className="flex space-x-3">
+                <button 
+                  onClick={handleThermalPrint}
+                  className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 flex items-center space-x-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>In Nhiệt</span>
+                </button>
+                <button 
+                  onClick={handlePrint}
+                  className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 flex items-center space-x-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>In Thường</span>
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -223,10 +337,10 @@ export default function PrintPage() {
                 <div ref={printRef} className="bg-white rounded-lg p-8 text-black">
                   {/* Invoice Header */}
                   <div className="header">
-                    <div className="logo">BI-A MANAGEMENT SYSTEM</div>
+                    <div className="logo">{SHOP_INFO.name}</div>
                     <div className="company-info">
-                      <p>123 Đường ABC, Quận XYZ, TP.HCM</p>
-                      <p>Điện thoại: (028) 1234 5678 | Email: info@bia-management.com</p>
+                      <p>{SHOP_INFO.address}</p>
+                      <p>Điện thoại: {SHOP_INFO.phone}</p>
                     </div>
                   </div>
 
