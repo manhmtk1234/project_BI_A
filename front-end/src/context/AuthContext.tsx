@@ -17,11 +17,18 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
     // Check if user is already logged in
-    const token = apiClient.getToken?.() || (typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null);
-    const savedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+    const token = apiClient.getToken?.() || localStorage.getItem('auth_token');
+    const savedUser = localStorage.getItem('user');
     
     if (token && savedUser) {
       try {
@@ -33,7 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     setIsLoading(false);
-  }, []);
+  }, [mounted]);
 
   const login = async (credentials: LoginRequest) => {
     try {
@@ -42,9 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(response.user);
       
       // Save user to localStorage
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('user', JSON.stringify(response.user));
-      }
+      localStorage.setItem('user', JSON.stringify(response.user));
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -60,10 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Logout error:', error);
     } finally {
       setUser(null);
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('user');
-        localStorage.removeItem('auth_token');
-      }
+      localStorage.removeItem('user');
+      localStorage.removeItem('auth_token');
     }
   };
 

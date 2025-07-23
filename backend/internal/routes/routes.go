@@ -15,13 +15,13 @@ import (
 func SetupRoutes(db *sql.DB, cfg *config.Config) *gin.Engine {
 	router := gin.Default()
 
-	// CORS middleware
+	// CORS middleware - Allow all origins for public access
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{cfg.FrontendURL},
+		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 	}))
 
 	// Initialize services

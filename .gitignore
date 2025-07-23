@@ -1,0 +1,98 @@
+# Dependencies
+node_modules/
+backend/vendor/
+
+# Environment variables (NEVER COMMIT THESE)
+.env
+.env.local
+.env.production
+.env.staging
+
+# Database
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Build outputs
+.next/
+build/
+dist/
+out/
+*.exe
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+
+# SYSTEM FILES DIRECTORY (CONTAINS SENSITIVE INFORMATION)
+system-files/
+
+# SECURITY: Files with sensitive information
+public-ip-test.md
+quick-password-test.md
+router-setup-complete.bat
+firewall-manual-setup.bat
+vnpt-support-guide.md
+find-router-password.bat
+*-password-*.md
+*-secret-*.md
+*-private-*.md
+
+# Local setup files (contain real IPs/credentials)
+HOME_SERVER_GUIDE.md
+VNPT_ROUTER_GUIDE.md
+ROUTER_SETUP_GUIDE.md
+LOCAL_SETUP_GUIDE.md
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Go specific
+*.mod.bak
+*.sum.bak
+
+# Next.js specific
+.next/
+.swc/
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"net/http"
 	"time"
 
@@ -49,13 +50,19 @@ func (h *DashboardHandler) GetDashboardStats(c *gin.Context) {
 	stats.TodayInvoices = int(todayInvoiceCount)
 
 	// Calculate average session time using correct table name and available columns
-	var avgMinutes float64
+	var avgMinutes sql.NullFloat64
 	h.db.Table("table_sessions").
 		Where("DATE(start_time) = ?", today).
 		Where("status IN ('completed', 'expired')").
-		Select("AVG(preset_duration_minutes - COALESCE(remaining_minutes, 0))").
+		Select("COALESCE(AVG(preset_duration_minutes - COALESCE(remaining_minutes, 0)), 0)").
 		Scan(&avgMinutes)
-	stats.AvgSessionTime = avgMinutes / 60.0 // Convert to hours
+	
+	// Handle NULL value safely
+	if avgMinutes.Valid {
+		stats.AvgSessionTime = avgMinutes.Float64 / 60.0 // Convert to hours
+	} else {
+		stats.AvgSessionTime = 0.0
+	}
 
 	c.JSON(http.StatusOK, stats)
 }

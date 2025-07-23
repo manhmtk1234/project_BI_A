@@ -1,21 +1,40 @@
-# Hệ Thống Quản Lý Hóa Đơn Bi-A (Phiên bản đơn giản)
+# Hệ Thống Quản Lý Hóa Đơn Bi-A 
 
-Hệ thống web quản lý hóa đơn bàn bi-a đơn giản với giao diện responsive cho điện thoại và máy tính.
+Hệ thống web quản lý hóa đơn bàn bi-a đầy đủ tính năng với giao diện responsive cho điện thoại và máy tính.
 
-## Công nghệ sử dụng
+## 🚀 Triển Khai Nhanh
+
+### Development (Local):
+```bash
+# Chạy development
+./start.bat        # Windows
+./start.sh         # Linux/Mac
+```
+
+### Production (Server):
+```bash
+# Triển khai production
+./deploy.bat       # Windows
+./deploy.sh        # Linux/Mac
+```
+
+## 🛠️ Công nghệ sử dụng
 
 - **Backend**: Golang (Gin framework)
-- **Frontend**: Next.js (React)
-- **Database**: MySQL
-- **Timer**: Frontend-based (JavaScript)
+- **Frontend**: Next.js 15 (React)
+- **Database**: MariaDB 10.11
+- **Container**: Docker & Docker Compose
+- **Proxy**: Nginx (optional)
+- **SSL**: Let's Encrypt support
 
-## Đặc điểm chính
+## ✨ Đặc điểm chính
 
-- 🎯 **Đơn giản**: Chỉ tập trung vào tính hóa đơn
-- ⚡ **Nhanh chóng**: Không có real-time complexity
+- 🎯 **Đầy đủ tính năng**: Quản lý sessions, orders, invoices
+- ⚡ **Hiệu suất cao**: Optimized queries và caching
 - 📱 **Responsive**: Hoạt động tốt trên mobile và desktop
 - 🔐 **Bảo mật**: JWT authentication với phân quyền
 - 💰 **Chính xác**: Tính toán thời gian và dịch vụ chính xác
+- 🐳 **Containerized**: Ready for production deployment
 
 ## Cấu trúc dự án
 
@@ -36,7 +55,103 @@ web_tuananh_bi_a/
 │   ├── .env.example
 │   └── src/
 ├── TODO.md                # Danh sách công việc
-└── README.md
+└── # BI-A Management System
+
+Hệ thống quản lý quán bi-a chuyên nghiệp với Go Backend và Next.js Frontend.
+
+## 🚀 Quick Start
+
+### Yêu cầu hệ thống
+- **MariaDB/MySQL** (Local installation)
+- **Go** 1.20+
+- **Node.js** 16+
+- **Windows** (script được tối ưu cho Windows)
+
+### Cài đặt và chạy
+
+1. **Setup Database**
+   ```bash
+   # Import database
+   .\import-local-db.bat
+   ```
+
+2. **Setup Firewall** (Chỉ cần 1 lần)
+   ```bash
+   # Run as Administrator
+   .\setup-firewall.bat
+   ```
+
+3. **Deploy Project**
+   ```bash
+   # Start all services
+   .\start-local.bat
+   ```
+
+4. **Stop Services**
+   ```bash
+   # Stop all services
+   .\stop-local.bat
+   ```
+
+## 📊 Access Points
+
+- **🌐 Website**: http://192.168.1.69:3000 (Public)
+- **🏠 Local**: http://localhost:3000
+- **🔧 API**: http://192.168.1.69:8080 (Public)
+- **💾 Database**: localhost:3306
+
+## 📁 Project Structure
+
+```
+project_bia/
+├── backend/               # Go API Server
+│   ├── internal/         # Business logic
+│   ├── main.go           # Entry point
+│   └── .env              # Environment config
+├── front-end/            # Next.js Frontend
+│   ├── src/              # Source code
+│   ├── package.json      # Dependencies
+│   └── .env.local        # Frontend config
+├── start-local.bat       # 🚀 Deploy script
+├── stop-local.bat        # 🛑 Stop script
+├── import-local-db.bat   # 💾 Database setup
+├── setup-firewall.bat    # 🛡️ Firewall config
+└── full_database.sql     # Database dump
+```
+
+## 🛠️ Development
+
+### Backend (Go)
+```bash
+cd backend
+go run main.go
+```
+
+### Frontend (Next.js)
+```bash
+cd front-end
+npm run dev
+```
+
+## 📋 Features
+
+- ✅ Local MariaDB Database
+- ✅ Go REST API Backend
+- ✅ Next.js React Frontend
+- ✅ Public Network Access
+- ✅ Automatic IP Configuration
+- ✅ Windows Firewall Setup
+- ✅ One-click Deployment
+
+## 🔧 Troubleshooting
+
+Xem chi tiết trong `LOCAL_SETUP_GUIDE.md`
+
+---
+
+**Phát triển bởi**: BI-A Team  
+**Phiên bản**: 2.0 (Local Deployment)  
+**Ngày**: July 2025
 ```
 
 ## Cài đặt và chạy
