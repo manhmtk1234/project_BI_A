@@ -309,3 +309,53 @@ func (h *TableHandler) UpdateTableRate(c *gin.Context) {
 		"hourly_rate": req.HourlyRate,
 	})
 }
+
+// Update session duration
+type UpdateDurationRequest struct {
+    AddedMinutes int `json:"added_minutes" binding:"required"`
+}
+
+func (h *TableHandler) UpdateSessionDuration(c *gin.Context) {
+    idStr := c.Param("id")
+    id, err := strconv.Atoi(idStr)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session id"})
+        return
+    }
+    var req UpdateDurationRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+    err = h.tableService.AddMinutesToSession(id, req.AddedMinutes)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"message": "Duration updated successfully"})
+}
+
+// Update preset duration
+type UpdatePresetDurationRequest struct {
+    PresetDurationMinutes int `json:"preset_duration_minutes" binding:"required,min=1,max=480"`
+}
+
+func (h *TableHandler) UpdatePresetDuration(c *gin.Context) {
+    idStr := c.Param("id")
+    id, err := strconv.Atoi(idStr)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session id"})
+        return
+    }
+    var req UpdatePresetDurationRequest
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+    err = h.tableService.UpdatePresetDuration(id, req.PresetDurationMinutes)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"message": "Preset duration updated successfully"})
+}

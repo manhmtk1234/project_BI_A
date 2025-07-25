@@ -36,6 +36,7 @@ export interface TableSession {
   hourly_rate: number;
   prepaid_amount: number;
   status: 'active' | 'paused' | 'completed' | 'expired';
+  session_type: 'fixed_time' | 'open_play'; // <-- Thêm dòng này
   created_by: number;
   created_at: string;
   updated_at: string;

@@ -78,6 +78,7 @@ func SetupRoutes(db *sql.DB, cfg *config.Config) *gin.Engine {
 			tables.POST("/sessions/:id/end", tableHandler.EndSession)
 			tables.POST("/sessions/orders", tableHandler.AddOrderToSession)
 			tables.POST("/sessions/expire", tableHandler.AutoExpireSessions)
+			tables.PUT("/sessions/:id/preset-duration", tableHandler.UpdatePresetDuration)
 		}
 
 		// Products routes

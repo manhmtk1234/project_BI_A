@@ -16,8 +16,10 @@ import {
   Menu, 
   X,
   Users,
-  Clock
+  Clock,
+  Bell // thêm icon chuông
 } from 'lucide-react';
+import { useNotification } from '@/context/NotificationContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -38,6 +40,9 @@ export default function DashboardLayout({ children }: LayoutProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { notifications, markAllRead } = useNotification();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const hasUnread = notifications.some(n => !n.read);
 
   useEffect(() => {
     if (!isAuthenticated && pathname !== '/login') {
@@ -48,6 +53,11 @@ export default function DashboardLayout({ children }: LayoutProps) {
   const handleLogout = async () => {
     await logout();
     router.push('/login');
+  };
+
+  const handleBellClick = () => {
+    setShowNotifications(!showNotifications);
+    markAllRead();
   };
 
   if (!isAuthenticated) {
@@ -146,14 +156,34 @@ export default function DashboardLayout({ children }: LayoutProps) {
               {menuItems.find(item => item.href === pathname)?.label || 'Dashboard'}
             </h1>
           </div>
-          
           <div className="flex items-center space-x-4">
-            <div className="hidden sm:flex items-center space-x-2 text-sm text-blue-200">
-              <Users className="w-4 h-4" />
-              <span>{user?.username}</span>
-              <span className="px-2 py-1 bg-blue-500/20 rounded-full text-xs">
-                {user?.role}
-              </span>
+            {/* Chuông thông báo */}
+            <div className="relative">
+              <button
+                onClick={handleBellClick}
+                className="text-white hover:text-blue-300 focus:outline-none"
+                title="Thông báo bàn hết giờ"
+              >
+                <Bell className="w-6 h-6" />
+                {hasUnread && (
+                  <span className="absolute top-0 right-0 block w-2 h-2 bg-red-500 rounded-full"></span>
+                )}
+              </button>
+              {/* Popup thông báo */}
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-64 bg-white rounded shadow-lg z-50">
+                  <div className="p-4 border-b font-bold text-blue-700">Thông báo bàn hết giờ</div>
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-gray-500">Không có thông báo mới</div>
+                  ) : (
+                    notifications.map((n) => (
+                      <div key={n.tableId} className="p-4 border-b last:border-b-0">
+                        {n.message}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </header>

@@ -6,7 +6,7 @@ import { Table, TableSession, StartSessionRequest } from '@/types';
 import { Clock, Play, Square, Users, DollarSign, Plus, Minus, ShoppingCart } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import SessionAmountDisplay from '@/components/SessionAmountDisplay';
-
+import { useNotification } from '@/context/NotificationContext';
 export default function TablesPage() {
   const [tables, setTables] = useState<Table[]>([]);
   const [activeSessions, setActiveSessions] = useState<TableSession[]>([]);
@@ -26,6 +26,8 @@ export default function TablesPage() {
   const [selectedTableForRate, setSelectedTableForRate] = useState<Table | null>(null);
   const [newHourlyRate, setNewHourlyRate] = useState(0);
   const router = useRouter();
+  const { addNotification } = useNotification();
+  
 
   // Check if user is logged in
   useEffect(() => {
@@ -44,10 +46,34 @@ export default function TablesPage() {
         apiClient.getAllTables(),
         apiClient.getActiveSessions()
       ]);
-      
-      // Ensure data is array
+
+      // Tính lại remaining_minutes cho từng session
+      const now = Date.now();
+      const updatedSessions = Array.isArray(sessionsData)
+        ? sessionsData.map((session) => {
+            if (session.status === 'active') {
+              const start = new Date(session.start_time).getTime();
+              const minutesPlayed = Math.floor((now - start) / 60000);
+
+              if (session.session_type === 'fixed_time') {
+                // Luôn tính lại remaining_minutes dựa trên preset_duration_minutes mới nhất
+                return {
+                  ...session,
+                  remaining_minutes: Math.max(session.preset_duration_minutes - minutesPlayed, 0)
+                };
+              } else {
+                return {
+                  ...session,
+                  remaining_minutes: minutesPlayed
+                };
+              }
+            }
+            return session;
+          })
+        : [];
+
       setTables(Array.isArray(tablesData) ? tablesData : []);
-      setActiveSessions(Array.isArray(sessionsData) ? sessionsData : []);
+      setActiveSessions(updatedSessions);
       setError(null);
     } catch (err) {
       setError('Failed to load data. Please check if you are logged in.');
@@ -58,25 +84,6 @@ export default function TablesPage() {
       setLoading(false);
     }
   };
-
-  // Timer effect for active sessions
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveSessions(prevSessions => 
-        prevSessions.map(session => {
-          if (session.status === 'active' && session.remaining_minutes && session.remaining_minutes > 0) {
-            return {
-              ...session,
-              remaining_minutes: session.remaining_minutes - 1
-            };
-          }
-          return session;
-        })
-      );
-    }, 60000); // Update every minute
-
-    return () => clearInterval(interval);
-  }, []);
 
   const startTable = async () => {
     if (!selectedTable || !customerName.trim()) {
@@ -102,29 +109,45 @@ export default function TablesPage() {
       alert('Không thể bắt đầu phiên chơi');
     }
   };
-
+  
   const endSession = async (sessionId: number) => {
     if (!confirm('Bạn có chắc muốn kết thúc phiên chơi này?')) return;
 
     try {
       await apiClient.endSession(sessionId);
       await loadData(); // Refresh data
+
+      // Gửi thông báo khi kết thúc phiên chơi
+      const session = activeSessions.find(s => s.id === sessionId);
+      const tableName = tables.find(t => t.id === session?.table_id)?.name || '';
+      addNotification({
+        tableId: session?.table_id || 0,
+        tableName,
+        message: `Bàn ${tableName} vừa được kết thúc!`,
+        read: false,
+      });
     } catch (err) {
       console.error('Error ending session:', err);
       alert('Không thể kết thúc phiên chơi');
     }
   };
 
-  const updateTime = async (sessionId: number, newTime: number) => {
+  const endSessionAndInvoice = async (sessionId: number) => {
     try {
-      await apiClient.updateRemainingTime(sessionId, newTime);
-      setActiveSessions(prev => 
-        prev.map(session => 
-          session.id === sessionId 
-            ? { ...session, remaining_minutes: newTime }
-            : session
-        )
-      );
+      // Gọi API kết thúc phiên chơi (đã tự động tạo hóa đơn)
+      const res = await apiClient.endSession(sessionId);
+      await loadData();
+      alert('Phiên chơi đã kết thúc và hóa đơn đã được xuất!');
+    } catch (err) {
+      console.error('Error ending session:', err);
+      alert('Không thể kết thúc phiên chơi hoặc xuất hóa đơn');
+    }
+  };
+
+  const updateTime = async (sessionId: number, newPresetDuration: number) => {
+    try {
+      await apiClient.updatePresetDuration(sessionId, newPresetDuration);
+      await loadData();
     } catch (err) {
       console.error('Error updating time:', err);
       alert('Không thể cập nhật thời gian');
@@ -263,6 +286,36 @@ export default function TablesPage() {
     }
   };
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadData(); // Luôn lấy dữ liệu mới nhất từ backend
+    }, 10000); // 10 giây hoặc 1 phút
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    activeSessions.forEach(session => {
+      if (
+        session.session_type === 'fixed_time' &&
+        session.status === 'active' &&
+        session.remaining_minutes === 0
+      ) {
+        endSessionAndInvoice(session.id);
+
+        // Gửi thông báo khi bàn hết giờ
+        const tableName = tables.find(t => t.id === session.table_id)?.name || '';
+        addNotification({
+          tableId: session.table_id,
+          tableName,
+          message: `Bàn ${tableName} đã hết giờ!`,
+          read: false,
+        });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSessions]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -366,7 +419,9 @@ export default function TablesPage() {
                         <div className="flex items-center space-x-2">
                           <Clock className="w-4 h-4" />
                           <span className="text-sm">
-                            Còn: {session.remaining_minutes ? formatTime(session.remaining_minutes) : 'N/A'}
+                            {session.session_type === 'fixed_time'
+                              ? `Còn: ${session.remaining_minutes ? formatTime(session.remaining_minutes) : 'N/A'}`
+                              : `Đã chơi: ${session.remaining_minutes ? formatTime(session.remaining_minutes) : 'N/A'}`}
                           </span>
                         </div>
                       </div>
@@ -381,16 +436,34 @@ export default function TablesPage() {
                       {/* Time Controls */}
                       <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => session.remaining_minutes && updateTime(session.id, session.remaining_minutes - 15)}
+                          onClick={() => {
+                            if (
+                              session.session_type === 'fixed_time' &&
+                              session.preset_duration_minutes > 15
+                            ) {
+                              updateTime(session.id, session.preset_duration_minutes - 15);
+                            }
+                          }}
                           className="p-1 bg-white/20 hover:bg-white/30 rounded"
-                          disabled={!session.remaining_minutes || session.remaining_minutes <= 15}
+                          disabled={
+                            session.session_type !== 'fixed_time' ||
+                            !session.remaining_minutes ||
+                            session.remaining_minutes <= 15
+                          }
                         >
                           <Minus className="w-3 h-3" />
                         </button>
                         <span className="text-xs">15 phút</span>
                         <button
-                          onClick={() => session.remaining_minutes && updateTime(session.id, session.remaining_minutes + 15)}
+                          onClick={() => {
+                            if (
+                              session.session_type === 'fixed_time'
+                            ) {
+                              updateTime(session.id, session.preset_duration_minutes + 15);
+                            }
+                          }}
                           className="p-1 bg-white/20 hover:bg-white/30 rounded"
+                          disabled={session.session_type !== 'fixed_time'}
                         >
                           <Plus className="w-3 h-3" />
                         </button>
@@ -468,7 +541,10 @@ export default function TablesPage() {
                   </label>
                   <select
                     value={presetDuration}
-                    onChange={(e) => setPresetDuration(Number(e.target.value))}
+                    onChange={(e) => {
+                      setPresetDuration(Number(e.target.value));
+                      console.log('presetDuration:', Number(e.target.value));
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value={30}>30 phút</option>
@@ -697,3 +773,4 @@ export default function TablesPage() {
     </div>
   );
 }
+

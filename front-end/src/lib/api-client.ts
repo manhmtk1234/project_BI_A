@@ -233,6 +233,12 @@ class ApiClient {
     const response = await this.api.get('/dashboard/activities');
     return response.data;
   }
+
+  async updatePresetDuration(sessionId: number, newPresetDuration: number): Promise<void> {
+    await this.api.put(`/tables/sessions/${sessionId}/preset-duration`, {
+      preset_duration_minutes: newPresetDuration
+    });
+  }
 }
 
 export const apiClient = new ApiClient();

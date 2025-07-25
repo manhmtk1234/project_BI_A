@@ -267,3 +267,21 @@ func (s *TableService) UpdateTableRate(tableID int, hourlyRate float64) error {
 
 	return nil
 }
+
+// Add minutes to session
+func (s *TableService) AddMinutesToSession(sessionID int, addedMinutes int) error {
+    _, err := s.db.Exec(
+        "UPDATE table_sessions SET preset_duration_minutes = preset_duration_minutes + ?, updated_at = NOW() WHERE id = ?",
+        addedMinutes, sessionID,
+    )
+    return err
+}
+
+// Update preset duration
+func (s *TableService) UpdatePresetDuration(sessionID int, presetDurationMinutes int) error {
+    _, err := s.db.Exec(
+        "UPDATE table_sessions SET preset_duration_minutes = ?, updated_at = NOW() WHERE id = ?",
+        presetDurationMinutes, sessionID,
+    )
+    return err
+}

@@ -77,7 +77,7 @@ type SessionOrder struct {
 type StartSessionRequest struct {
 	TableID               uint    `json:"table_id" binding:"required"`
 	CustomerName          string  `json:"customer_name" binding:"required"`
-	PresetDurationMinutes int     `json:"preset_duration_minutes" binding:"required,min=15,max=480"` // 15 min to 8 hours
+	PresetDurationMinutes int     `json:"preset_duration_minutes" binding:"required,min=1,max=480"` // 15 min to 8 hours
 	PrepaidAmount         float64 `json:"prepaid_amount"`
 }
 
