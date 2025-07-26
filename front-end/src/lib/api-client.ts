@@ -199,6 +199,11 @@ class ApiClient {
     return response.data;
   }
 
+  public async getSessionOrders(sessionId: number): Promise<SessionOrder[]> {
+    const response = await this.api.get(`/tables/sessions/${sessionId}/orders`);
+    return response.data.orders || response.data || [];
+  }
+
   // Calculate session amount realtime
   public async calculateSessionAmount(sessionId: number): Promise<{
     session_id: number;

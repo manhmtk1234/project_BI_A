@@ -79,6 +79,7 @@ type StartSessionRequest struct {
 	CustomerName          string  `json:"customer_name" binding:"required"`
 	PresetDurationMinutes int     `json:"preset_duration_minutes" binding:"required,min=1,max=480"` // 15 min to 8 hours
 	PrepaidAmount         float64 `json:"prepaid_amount"`
+	SessionType           string  `json:"session_type" binding:"required,oneof=fixed_time open_play"`
 }
 
 type AddOrderRequest struct {

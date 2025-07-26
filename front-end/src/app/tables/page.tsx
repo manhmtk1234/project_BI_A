@@ -25,9 +25,79 @@ export default function TablesPage() {
   const [showEditRateModal, setShowEditRateModal] = useState(false);
   const [selectedTableForRate, setSelectedTableForRate] = useState<Table | null>(null);
   const [newHourlyRate, setNewHourlyRate] = useState(0);
+  const [showEndSessionModal, setShowEndSessionModal] = useState(false);
+  const [endSessionInfo, setEndSessionInfo] = useState<{session?: TableSession; table?: Table; products?: any[]; totalPlayAmount?: number; totalProductAmount?: number} | null>(null);
+  const [sessionOrders, setSessionOrders] = useState<{[sessionId: number]: any[]}>({});
   const router = useRouter();
   const { addNotification } = useNotification();
   
+  // Helper function to load orders for a single session
+  const loadSingleSessionOrders = async (sessionId: number) => {
+    try {
+      const orders = await apiClient.getSessionOrders(sessionId);
+      setSessionOrders(prev => ({
+        ...prev,
+        [sessionId]: orders
+      }));
+    } catch (error) {
+      console.error('Error loading session orders:', error);
+    }
+  };
+  
+  // WebSocket connection DISABLED - Using polling instead for stability
+  /*
+  const { isConnected, sendMessage } = useWebSocket({
+    onTableUpdate: (data: any) => {
+      console.log('Table update received:', data);
+      loadData();
+    },
+    onSessionUpdate: (data: any) => {
+      console.log('Session update received:', data);
+      if (data.session) {
+        // Update session in activeSessions
+        setActiveSessions(prev => {
+          const filtered = prev.filter(s => s.id !== data.session.id);
+          if (data.session.status === 'active') {
+            return [...filtered, data.session];
+          }
+          return filtered;
+        });
+        
+        // Reload orders for this session if it's an open_play
+        if (data.session.session_type === 'open_play' && data.session.status === 'active') {
+          loadSingleSessionOrders(data.session.id);
+        }
+      }
+    },
+    onConnect: () => {
+      console.log('WebSocket connected');
+      addNotification({
+        tableId: 0,
+        tableName: 'System',
+        message: 'Kết nối thời gian thực thành công',
+        read: false
+      });
+    },
+    onDisconnect: () => {
+      console.log('WebSocket disconnected');
+      addNotification({
+        tableId: 0,
+        tableName: 'System',
+        message: 'Mất kết nối thời gian thực',
+        read: false
+      });
+    }
+  });
+  */
+
+  // Add back polling for stability
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadData();
+    }, 5000); // Poll every 5 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Check if user is logged in
   useEffect(() => {
@@ -42,6 +112,7 @@ export default function TablesPage() {
   const loadData = async () => {
     try {
       setLoading(true);
+
       const [tablesData, sessionsData] = await Promise.all([
         apiClient.getAllTables(),
         apiClient.getActiveSessions()
@@ -74,6 +145,10 @@ export default function TablesPage() {
 
       setTables(Array.isArray(tablesData) ? tablesData : []);
       setActiveSessions(updatedSessions);
+      
+      // Load orders cho từng session đang active
+      await loadSessionOrders(updatedSessions);
+      
       setError(null);
     } catch (err) {
       setError('Failed to load data. Please check if you are logged in.');
@@ -83,6 +158,26 @@ export default function TablesPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Load orders cho các session
+  const loadSessionOrders = async (sessions: TableSession[]) => {
+    const ordersData: {[sessionId: number]: any[]} = {};
+    
+    // Load orders cho từng session song song
+    await Promise.all(
+      sessions.map(async (session) => {
+        try {
+          const orders = await apiClient.getSessionOrders(session.id);
+          ordersData[session.id] = Array.isArray(orders) ? orders : [];
+        } catch (err) {
+          console.error(`Error loading orders for session ${session.id}:`, err);
+          ordersData[session.id] = [];
+        }
+      })
+    );
+    
+    setSessionOrders(ordersData);
   };
 
   const startTable = async () => {
@@ -96,7 +191,8 @@ export default function TablesPage() {
         table_id: selectedTable.id,
         customer_name: customerName.trim(),
         preset_duration_minutes: presetDuration,
-        prepaid_amount: prepaidAmount
+        prepaid_amount: prepaidAmount,
+        session_type: sessionType
       };
 
       await apiClient.startSession(request);
@@ -109,8 +205,65 @@ export default function TablesPage() {
       alert('Không thể bắt đầu phiên chơi');
     }
   };
+
+  // Hàm mở modal kết thúc cho open_play
+  const openEndSessionModal = async (session: TableSession) => {
+    const table = tables.find(t => t.id === session.table_id);
+    let products: any[] = [];
+    let totalProductAmount = 0;
+    
+    // Lấy orders từ state đã load
+    const orders = sessionOrders[session.id] || [];
+    products = orders;
+    totalProductAmount = getSessionOrdersTotal(session.id);
+    
+    let totalPlayAmount = 0;
+    if (session.session_type === 'open_play' && table) {
+      totalPlayAmount = Math.ceil(session.remaining_minutes || 0) * (table.hourly_rate / 60);
+    } else if (session.session_type === 'fixed_time' && table) {
+      totalPlayAmount = session.preset_duration_minutes * (table.hourly_rate / 60);
+    }
+    
+    setEndSessionInfo({session, table, products, totalPlayAmount, totalProductAmount});
+    setShowEndSessionModal(true);
+  };
+
+  // Hàm xác nhận kết thúc phiên open_play
+  const confirmEndOpenPlaySession = async () => {
+    if (!endSessionInfo?.session) return;
+    try {
+      await apiClient.endSession(endSessionInfo.session.id);
+      await loadData();
+      setShowEndSessionModal(false);
+      setEndSessionInfo(null);
+      
+      // Gửi thông báo khi kết thúc phiên chơi
+      const tableName = endSessionInfo.table?.name || '';
+      addNotification({
+        tableId: endSessionInfo.session.table_id,
+        tableName,
+        message: `Bàn ${tableName} vừa được kết thúc!`,
+        read: false,
+      });
+      
+      alert('Phiên chơi đã kết thúc và hóa đơn đã được xuất!');
+    } catch (err) {
+      console.error('Error ending session:', err);
+      alert('Không thể kết thúc phiên chơi hoặc xuất hóa đơn');
+    }
+  };
   
   const endSession = async (sessionId: number) => {
+    const session = activeSessions.find(s => s.id === sessionId);
+    if (!session) return;
+    
+    // Nếu là open_play thì mở modal xác nhận
+    if (session.session_type === 'open_play') {
+      openEndSessionModal(session);
+      return;
+    }
+    
+    // Nếu là fixed_time thì xác nhận bình thường
     if (!confirm('Bạn có chắc muốn kết thúc phiên chơi này?')) return;
 
     try {
@@ -203,6 +356,9 @@ export default function TablesPage() {
         items: items
       });
       
+      // Refresh data để cập nhật orders
+      await loadData();
+      
       setShowProductModal(false);
       setCart({});
       setSelectedSessionId(null);
@@ -286,13 +442,21 @@ export default function TablesPage() {
     }
   };
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadData(); // Luôn lấy dữ liệu mới nhất từ backend
-    }, 10000); // 10 giây hoặc 1 phút
+  // Tính tổng tiền sản phẩm đã order cho session
+  const getSessionOrdersTotal = (sessionId: number): number => {
+    const orders = sessionOrders[sessionId] || [];
+    return orders.reduce((total, order) => total + (order.total_price || 0), 0);
+  };
 
-    return () => clearInterval(interval);
-  }, []);
+  useEffect(() => {
+    // Only load data once when component mounts
+    const token = apiClient.getToken();
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+    loadData();
+  }, [router]);
 
   useEffect(() => {
     activeSessions.forEach(session => {
@@ -421,53 +585,111 @@ export default function TablesPage() {
                           <span className="text-sm">
                             {session.session_type === 'fixed_time'
                               ? `Còn: ${session.remaining_minutes ? formatTime(session.remaining_minutes) : 'N/A'}`
-                              : `Đã chơi: ${session.remaining_minutes ? formatTime(session.remaining_minutes) : 'N/A'}`}
+                              : `Đã chơi: ${session.remaining_minutes ? formatTime(session.remaining_minutes) : '00:00'}`}
+                          </span>
+                        </div>
+                        {session.session_type === 'open_play' && (
+                          <div className="flex items-center space-x-2">
+                            <DollarSign className="w-4 h-4" />
+                            <span className="text-sm">
+                              Số tiền chơi cho 1 phút: {formatCurrency(table.hourly_rate / 60)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs font-semibold">
+                            {session.session_type === 'fixed_time'
+                              ? '⏱️ Theo giờ'
+                              : '⏱️ Theo số giờ chơi'}
                           </span>
                         </div>
                       </div>
 
-                      {/* Realtime Amount Display */}
-                      <SessionAmountDisplay 
-                        sessionId={session.id} 
-                        realtime={true}
-                        className="border-t border-white/20 pt-2"
-                      />
+                      {/* Realtime Amount Display cho open_play vs fixed_time */}
+                      {session.session_type === 'open_play' ? (
+                        <div className="border-t border-white/20 pt-2 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm">Tiền chơi:</span>
+                            <span className="text-sm font-bold">
+                              {formatCurrency(Math.ceil(session.remaining_minutes || 0) * (table.hourly_rate / 60))}
+                            </span>
+                          </div>
+                          {getSessionOrdersTotal(session.id) > 0 && (
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm">Tiền sản phẩm:</span>
+                              <span className="text-sm font-bold">
+                                {formatCurrency(getSessionOrdersTotal(session.id))}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center justify-between border-t border-white/20 pt-1">
+                            <span className="text-sm font-bold">Tổng cộng:</span>
+                            <span className="text-lg font-bold">
+                              {formatCurrency(
+                                Math.ceil(session.remaining_minutes || 0) * (table.hourly_rate / 60) +
+                                getSessionOrdersTotal(session.id)
+                              )}
+                            </span>
+                          </div>
+                          {sessionOrders[session.id] && sessionOrders[session.id].length > 0 && (
+                            <div className="mt-2">
+                              <div className="text-xs text-white/80 mb-1">Sản phẩm đã order:</div>
+                              <div className="text-xs text-white/70 space-y-1">
+                                {sessionOrders[session.id].map((order, index) => (
+                                  <div key={index} className="flex justify-between">
+                                    <span>{order.product_name} x{order.quantity}</span>
+                                    <span>{formatCurrency(order.total_price)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <SessionAmountDisplay 
+                          sessionId={session.id} 
+                          realtime={true}
+                          className="border-t border-white/20 pt-2"
+                        />
+                      )}
 
-                      {/* Time Controls */}
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => {
-                            if (
-                              session.session_type === 'fixed_time' &&
-                              session.preset_duration_minutes > 15
-                            ) {
-                              updateTime(session.id, session.preset_duration_minutes - 15);
+                      {/* Time Controls chỉ cho fixed_time */}
+                      {session.session_type === 'fixed_time' && (
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => {
+                              if (
+                                session.session_type === 'fixed_time' &&
+                                session.preset_duration_minutes > 15
+                              ) {
+                                updateTime(session.id, session.preset_duration_minutes - 15);
+                              }
+                            }}
+                            className="p-1 bg-white/20 hover:bg-white/30 rounded"
+                            disabled={
+                              session.session_type !== 'fixed_time' ||
+                              !session.remaining_minutes ||
+                              session.remaining_minutes <= 15
                             }
-                          }}
-                          className="p-1 bg-white/20 hover:bg-white/30 rounded"
-                          disabled={
-                            session.session_type !== 'fixed_time' ||
-                            !session.remaining_minutes ||
-                            session.remaining_minutes <= 15
-                          }
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="text-xs">15 phút</span>
-                        <button
-                          onClick={() => {
-                            if (
-                              session.session_type === 'fixed_time'
-                            ) {
-                              updateTime(session.id, session.preset_duration_minutes + 15);
-                            }
-                          }}
-                          className="p-1 bg-white/20 hover:bg-white/30 rounded"
-                          disabled={session.session_type !== 'fixed_time'}
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="text-xs">15 phút</span>
+                          <button
+                            onClick={() => {
+                              if (
+                                session.session_type === 'fixed_time'
+                              ) {
+                                updateTime(session.id, session.preset_duration_minutes + 15);
+                              }
+                            }}
+                            className="p-1 bg-white/20 hover:bg-white/30 rounded"
+                            disabled={session.session_type !== 'fixed_time'}
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
 
                       {/* Action buttons */}
                       <div className="space-y-2">
@@ -765,6 +987,58 @@ export default function TablesPage() {
                 disabled={newHourlyRate <= 0}
               >
                 Cập nhật
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal xác nhận kết thúc phiên open_play */}
+      {showEndSessionModal && endSessionInfo?.session && endSessionInfo?.table && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">Kết thúc phiên chơi - {endSessionInfo.table.name}</h2>
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-medium">Khách hàng:</span>
+                  <span>{endSessionInfo.session.customer_name}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-medium">Thời gian chơi:</span>
+                  <span>{formatTime(endSessionInfo.session.remaining_minutes || 0)}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-medium">Tiền chơi:</span>
+                  <span className="text-blue-600 font-bold">{formatCurrency(endSessionInfo.totalPlayAmount || 0)}</span>
+                </div>
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-medium">Tiền sản phẩm:</span>
+                  <span className="text-blue-600 font-bold">{formatCurrency(endSessionInfo.totalProductAmount || 0)}</span>
+                </div>
+                <div className="border-t pt-2 mt-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-lg">Tổng cộng:</span>
+                    <span className="text-red-600 font-bold text-lg">{formatCurrency((endSessionInfo.totalPlayAmount || 0) + (endSessionInfo.totalProductAmount || 0))}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowEndSessionModal(false);
+                  setEndSessionInfo(null);
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={confirmEndOpenPlaySession}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Xác nhận kết thúc
               </button>
             </div>
           </div>

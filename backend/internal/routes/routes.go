@@ -73,6 +73,7 @@ func SetupRoutes(db *sql.DB, cfg *config.Config) *gin.Engine {
 			tables.GET("/sessions", tableHandler.GetActiveSessions)
 			tables.POST("/sessions", tableHandler.StartSession)
 			tables.GET("/sessions/:id", tableHandler.GetSessionByID)
+			tables.GET("/sessions/:id/orders", tableHandler.GetSessionOrders)
 			tables.GET("/sessions/:id/calculate-amount", tableHandler.CalculateSessionAmount)
 			tables.PUT("/sessions/:id/time", tableHandler.UpdateRemainingTime)
 			tables.POST("/sessions/:id/end", tableHandler.EndSession)

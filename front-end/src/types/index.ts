@@ -47,6 +47,7 @@ export interface StartSessionRequest {
   customer_name: string;
   preset_duration_minutes: number;
   prepaid_amount: number;
+  session_type: 'fixed_time' | 'open_play';
 }
 
 // Products

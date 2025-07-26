@@ -76,9 +76,9 @@ func (s *TableService) StartSession(req *models.StartSessionRequest, createdBy i
 	// Create session
 	result, err := tx.Exec(`
 		INSERT INTO table_sessions 
-		(table_id, customer_name, preset_duration_minutes, remaining_minutes, hourly_rate, prepaid_amount, created_by) 
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, req.TableID, req.CustomerName, req.PresetDurationMinutes, req.PresetDurationMinutes, hourlyRate, req.PrepaidAmount, createdBy)
+		(table_id, customer_name, preset_duration_minutes, remaining_minutes, hourly_rate, prepaid_amount, session_type, created_by) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, req.TableID, req.CustomerName, req.PresetDurationMinutes, req.PresetDurationMinutes, hourlyRate, req.PrepaidAmount, req.SessionType, createdBy)
 	
 	if err != nil {
 		return nil, err

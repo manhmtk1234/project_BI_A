@@ -209,6 +209,24 @@ func (h *TableHandler) AddOrderToSession(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"orders": orders})
 }
 
+// Get orders for a session
+func (h *TableHandler) GetSessionOrders(c *gin.Context) {
+	idStr := c.Param("id")
+	sessionID, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid session ID"})
+		return
+	}
+
+	orders, err := h.productService.GetSessionOrders(sessionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"orders": orders})
+}
+
 // Auto-expire sessions (to be called periodically)
 func (h *TableHandler) AutoExpireSessions(c *gin.Context) {
 	err := h.tableService.AutoExpireSessions()
